@@ -3,14 +3,14 @@ import React, { useMemo } from 'react';
 import { ReconciliationResult, AppConfig } from '../types';
 import SummaryCard from './SummaryCard';
 import ConfigPanel from './ConfigPanel';
-import { BadgeCheck, Banknote, Users, AlertTriangle, Wallet, TrendingUp, Smartphone, QrCode } from 'lucide-react';
+import { BadgeCheck, Banknote, Users, AlertTriangle, Wallet, TrendingUp, Smartphone, QrCode, Sparkles } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 interface Props {
   data: ReconciliationResult;
   config: AppConfig;
   onUpdateConfig: (newConfig: AppConfig) => void;
-  onViewDetails: (view: 'cash' | 'commission' | 'footfall' | 'revenue' | 'wechat' | 'alipay' | 'variance') => void;
+  onViewDetails: (view: 'cash' | 'commission' | 'footfall' | 'revenue' | 'wechat' | 'alipay' | 'variance' | 'validRevenue') => void;
 }
 
 const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetails }) => {
@@ -25,11 +25,13 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
   ];
   const COLORS = ['#16a34a', '#dc2626', '#ca8a04'];
 
-  // Logic for Top 10 Spenders
+  // Logic for Top 10 Spenders (Based on Effective Sales / salesAmount)
+  // Filter out recharges automatically via salesAmount = 0 logic in engine
   const topSpenders = useMemo(() => {
     const spendingMap = new Map<string, { name: string, phone: string, total: number }>();
 
-    // Collect all relevant ERP records that represent value (Matches, MissingMoney, Cash, Deposit Consumption)
+    // Collect all relevant ERP records 
+    // We iterate over ALL records in memory lists to catch everyone
     const allRecords = [
         ...data.matches.map(m => m.erp),
         ...data.missingMoney,
@@ -52,9 +54,9 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
             });
         }
 
-        // Total Spending = Net Payment Amount + Deposit Used
+        // Total Spending = Sales Amount (excludes Recharge, includes Deposit consumption)
         const current = spendingMap.get(key)!;
-        current.total += (r.amount + r.deposit);
+        current.total += r.salesAmount;
     });
 
     // Sort descending and take top 10
@@ -72,7 +74,7 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
              {payload[0].payload.phone || '无电话'}
           </p>
           <p className="text-indigo-600 font-bold">
-            总消费: {formatCurrency(payload[0].value)}
+            有效消费: {formatCurrency(payload[0].value)}
           </p>
         </div>
       );
@@ -86,12 +88,20 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <SummaryCard
-          title="实际总营收"
+          title="实际总营收 (Money In)"
           value={formatCurrency(summary.totalRevenueActual)}
           subValue={`ERP应收: ${formatCurrency(summary.totalRevenueERP)}`}
           icon={<Wallet size={24} />}
           color="indigo"
           onClick={() => onViewDetails('revenue')}
+        />
+        <SummaryCard
+          title="有效营收 (Effective Sales)"
+          value={formatCurrency(summary.totalValidRevenue)}
+          subValue="扣除充值，包含储值消耗"
+          icon={<Sparkles size={24} />}
+          color="cyan"
+          onClick={() => onViewDetails('validRevenue')}
         />
         <SummaryCard
           title="微信收入"
@@ -107,6 +117,9 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
           color="blue"
           onClick={() => onViewDetails('alipay')}
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <SummaryCard
           title="营收差异 (Variance)"
           value={formatCurrency(summary.variance)}
@@ -116,9 +129,6 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
           color={summary.variance >= 0 ? "green" : "red"}
           onClick={() => onViewDetails('variance')}
         />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <SummaryCard
           title="现金结余"
           value={formatCurrency(summary.cashBalance)}
@@ -142,12 +152,6 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
           icon={<Users size={24} />}
           color="slate"
           onClick={() => onViewDetails('footfall')}
-        />
-        <SummaryCard
-          title="对账匹配率"
-          value={`${summary.matchRate.toFixed(1)}%`}
-          icon={<AlertTriangle size={24} />}
-          color={summary.matchRate > 95 ? "green" : "orange"}
         />
       </div>
 
@@ -195,19 +199,19 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
                     <span className="font-bold text-amber-600">{data.missingEntry.length} 笔</span>
                 </div>
                  <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
-                    <span className="text-slate-600">移动支付总额 (WeChat+Alipay)</span>
-                    <span className="font-bold text-indigo-600">{formatCurrency(summary.totalWechat + summary.totalAlipay)}</span>
+                    <span className="text-slate-600">对账匹配率</span>
+                    <span className={`font-bold ${summary.matchRate > 95 ? 'text-green-600' : 'text-orange-500'}`}>{summary.matchRate.toFixed(1)}%</span>
                 </div>
             </div>
         </div>
       </div>
 
-      {/* NEW: Top 10 Spenders Bar Chart */}
+      {/* Top 10 Spenders Bar Chart */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
          <div className="flex justify-between items-center mb-6">
             <div>
-                <h3 className="text-lg font-semibold text-slate-800">高价值客户 TOP 10</h3>
-                <p className="text-sm text-slate-500">基于 ERP 实收额 + 储值消耗计算 (同一姓名+手机号合并)</p>
+                <h3 className="text-lg font-semibold text-slate-800">高价值客户 TOP 10 (有效消费)</h3>
+                <p className="text-sm text-slate-500">基于 实际服务消耗 (扣除押金充值) 计算 (同一姓名+手机号合并)</p>
             </div>
          </div>
          <div className="h-80 w-full">
@@ -234,10 +238,10 @@ const Dashboard: React.FC<Props> = ({ data, config, onUpdateConfig, onViewDetail
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f1f5f9' }} />
                     <Bar 
                         dataKey="total" 
-                        fill="#4f46e5" 
+                        fill="#06b6d4" 
                         radius={[4, 4, 0, 0]} 
                         barSize={40}
-                        activeBar={{ fill: '#4338ca' }}
+                        activeBar={{ fill: '#0891b2' }}
                     />
                 </BarChart>
             </ResponsiveContainer>

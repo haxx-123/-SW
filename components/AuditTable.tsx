@@ -17,6 +17,7 @@ interface AuditRow {
   timeDiff: number | null;
   commission: number;
   type: 'match' | 'cash' | 'deposit';
+  erpType: string; // NEW
 }
 
 const AuditTable: React.FC<Props> = ({ data }) => {
@@ -41,7 +42,8 @@ const AuditTable: React.FC<Props> = ({ data }) => {
         amount: m.erp.amount,
         timeDiff: m.timeDiffMinutes,
         commission: m.erp.commission,
-        type: 'match'
+        type: 'match',
+        erpType: m.erp.type
       });
     });
 
@@ -56,7 +58,8 @@ const AuditTable: React.FC<Props> = ({ data }) => {
         amount: r.amount,
         timeDiff: 0,
         commission: r.commission,
-        type: 'cash'
+        type: 'cash',
+        erpType: r.type
       });
     });
 
@@ -71,7 +74,8 @@ const AuditTable: React.FC<Props> = ({ data }) => {
         amount: r.deposit, // Show deposit amount consumed
         timeDiff: 0,
         commission: r.commission,
-        type: 'deposit'
+        type: 'deposit',
+        erpType: r.type
       });
     });
 
@@ -87,6 +91,7 @@ const AuditTable: React.FC<Props> = ({ data }) => {
       ['指标 (Metric)', '数值 (Value)'],
       ['ERP总应收 (Total Revenue ERP)', data.summary.totalRevenueERP],
       ['实际总营收 (Total Revenue Actual)', data.summary.totalRevenueActual],
+      ['有效营收 (Total Valid Revenue)', data.summary.totalValidRevenue],
       ['微信收入 (WeChat Revenue)', data.summary.totalWechat],
       ['支付宝收入 (Alipay Revenue)', data.summary.totalAlipay],
       ['差异 (Variance)', data.summary.variance],
@@ -126,9 +131,10 @@ const AuditTable: React.FC<Props> = ({ data }) => {
     window.XLSX.utils.book_append_sheet(wb, wsAnomalies, "异常记录 (Anomalies)");
 
     // --- Sheet 3: Full Audit Log ---
-    const mappingHeader = ['ERP ID', '客户名', 'ERP时间', '渠道', '支付时间', '金额/储值消耗', '差额/时差', '提成'];
+    const mappingHeader = ['ERP ID', '交易类型', '客户名', 'ERP时间', '渠道', '支付时间', '金额/储值消耗', '差额/时差', '提成'];
     const mappingRows = allRows.map(r => [
       r.erpId,
+      r.erpType,
       r.client,
       r.erpDate.toLocaleString(),
       r.channel,
@@ -162,6 +168,7 @@ const AuditTable: React.FC<Props> = ({ data }) => {
           <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 sticky top-0 z-10">
             <tr>
               <th className="px-6 py-3 font-medium">ERP ID</th>
+              <th className="px-6 py-3 font-medium">交易类型</th>
               <th className="px-6 py-3 font-medium">客户名</th>
               <th className="px-6 py-3 font-medium">ERP 时间</th>
               <th className="px-6 py-3 font-medium">渠道</th>
@@ -175,6 +182,7 @@ const AuditTable: React.FC<Props> = ({ data }) => {
             {allRows.map((r, i) => (
               <tr key={i} className="hover:bg-slate-50">
                 <td className="px-6 py-2 font-mono text-xs text-slate-500 truncate max-w-[100px]" title={r.erpId}>{r.erpId}</td>
+                <td className="px-6 py-2 text-slate-900">{r.erpType}</td>
                 <td className="px-6 py-2 text-slate-900">{r.client}</td>
                 <td className="px-6 py-2 text-slate-600">{formatDate(r.erpDate)}</td>
                 <td className="px-6 py-2 text-slate-600">
@@ -199,7 +207,7 @@ const AuditTable: React.FC<Props> = ({ data }) => {
               </tr>
             ))}
             {allRows.length === 0 && (
-                 <tr><td colSpan={8} className="px-6 py-8 text-center text-slate-400">暂无数据</td></tr>
+                 <tr><td colSpan={9} className="px-6 py-8 text-center text-slate-400">暂无数据</td></tr>
             )}
           </tbody>
         </table>

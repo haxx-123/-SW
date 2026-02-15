@@ -1,5 +1,4 @@
 
-
 export interface RawERPRecord {
   [key: string]: any;
 }
@@ -13,6 +12,7 @@ export interface ERPRecord {
   date: Date;
   amount: number; // Net amount (after deposit deduction)
   deposit: number; // Deposit amount consumed
+  salesAmount: number; // NEW: Actual Service Value (Sales = Net + Deposit, Recharge = 0)
   type: string;
   client: string;
   remark: string;
@@ -42,6 +42,7 @@ export interface ReconciliationResult {
   summary: {
     totalRevenueERP: number;
     totalRevenueActual: number;
+    totalValidRevenue: number; // NEW: Effective Revenue (Sales Amount)
     totalWechat: number;
     totalAlipay: number;
     variance: number;

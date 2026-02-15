@@ -176,9 +176,14 @@ export const processERPData = (rawData: any[][], config: AppConfig): ERPRecord[]
     // Commission Logic (Dynamic)
     let commission = 0;
     
+    // Rule: Commission applies to Sales/Consumption, NOT Top-ups (Recharge).
+    // Identify if it's a Recharge
+    const isRecharge = type.includes('押金充值') || type.includes('充值');
+
     // Commission should be based on the Service Value (Raw Amount), not just the Net Payment
     // e.g. Paid 100 via Deposit -> Net 0, but Commission should be on 100.
-    if (config && config.commissionRules) {
+    // BUT only calculate if it is NOT a recharge.
+    if (config && config.commissionRules && !isRecharge) {
         const matchedRule = config.commissionRules.find(rule => 
             remark.includes(rule.keyword)
         );
@@ -187,11 +192,17 @@ export const processERPData = (rawData: any[][], config: AppConfig): ERPRecord[]
         }
     }
 
+    // NEW: Calculate Actual Sales Value (Spending) per row
+    // If it's a recharge, spending is 0 (it's a liability).
+    // If it's a sale, spending is Net Cash + Deposit Used.
+    const salesAmount = isRecharge ? 0 : (amount + deposit);
+
     records.push({
       id,
       date,
       amount, // Net Amount (for matching)
       deposit, // Track deposit usage
+      salesAmount, // New field for accurate spending calc
       type,
       client,
       remark,
@@ -374,7 +385,17 @@ const aggregateERPData = (records: ERPRecord[], windowMinutes: number): ERPRecor
         current.amount += next.amount;
         current.deposit += next.deposit;
         current.commission += next.commission;
+        current.salesAmount += next.salesAmount; // Accumulate sales value separately
         current.id += `, ${next.id}`;
+        
+        // Preserve types and remarks to handle mixed transactions (e.g. Sales + Recharge)
+        if (!current.type.includes(next.type)) {
+            current.type += ` & ${next.type}`;
+        }
+        if (next.remark && !current.remark.includes(next.remark)) {
+            current.remark += ` | ${next.remark}`;
+        }
+        
         // Keep current.date (the earliest timestamp of the batch)
       } else {
         // Push current, start new batch
@@ -522,6 +543,10 @@ export const runReconciliation = (
   // Actual Revenue = Matched Digital + Unmatched Digital + Manual Cash
   const totalDigitalActual = aggregatedPay.reduce((sum, r) => sum + r.amount, 0);
   const totalRevenueActual = totalDigitalActual + cashActual;
+
+  // New: Valid Revenue (Effective Sales)
+  // Sum of all ERP salesAmount (Calculated as Amount + Deposit for Sales, 0 for Recharges)
+  const totalValidRevenue = erpData.reduce((sum, r) => sum + r.salesAmount, 0);
   
   const totalCommission = erpData.reduce((sum, r) => sum + r.commission, 0);
   const footfall = new Set(erpData.map(r => r.phone).filter(p => p)).size;
@@ -531,6 +556,7 @@ export const runReconciliation = (
     summary: {
       totalRevenueERP,
       totalRevenueActual,
+      totalValidRevenue,
       totalWechat,
       totalAlipay,
       variance: totalRevenueActual - totalRevenueERP,

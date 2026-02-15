@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { ReconciliationResult, AppConfig, ERPRecord } from '../types';
 import { ArrowLeft, BadgeCheck, User } from 'lucide-react';
@@ -105,6 +106,7 @@ const CommissionDetail: React.FC<Props> = ({ data, config, onBack }) => {
                     <tr>
                         <th className="px-6 py-3 font-medium">员工/规则</th>
                         <th className="px-6 py-3 font-medium">日期</th>
+                        <th className="px-6 py-3 font-medium">交易类型</th>
                         <th className="px-6 py-3 font-medium">客户</th>
                         <th className="px-6 py-3 font-medium">项目/备注</th>
                         <th className="px-6 py-3 font-medium text-right">交易额</th>
@@ -117,6 +119,7 @@ const CommissionDetail: React.FC<Props> = ({ data, config, onBack }) => {
                             <tr key={`${name}-${i}`} className="hover:bg-slate-50">
                                 <td className="px-6 py-3 font-medium text-slate-800">{name}</td>
                                 <td className="px-6 py-3 text-slate-600">{new Date(r.date).toLocaleString('zh-CN')}</td>
+                                <td className="px-6 py-3 text-slate-900">{r.type}</td>
                                 <td className="px-6 py-3 text-slate-900">{r.client}</td>
                                 <td className="px-6 py-3 text-slate-500">{r.remark}</td>
                                 <td className="px-6 py-3 text-slate-600 text-right">{formatCurrency(r.amount + r.deposit)}</td>
@@ -125,7 +128,7 @@ const CommissionDetail: React.FC<Props> = ({ data, config, onBack }) => {
                         ))
                     )}
                     {allCommissionableRecords.length === 0 && (
-                        <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400">无提成记录</td></tr>
+                        <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-400">无提成记录</td></tr>
                     )}
                 </tbody>
             </table>

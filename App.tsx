@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import Dashboard from './components/Dashboard';
@@ -9,6 +10,7 @@ import FootfallDetail from './components/FootfallDetail';
 import RevenueDetail from './components/RevenueDetail';
 import ChannelDetail from './components/ChannelDetail';
 import VarianceDetail from './components/VarianceDetail';
+import ValidRevenueDetail from './components/ValidRevenueDetail';
 import { AnalysisState, AppConfig } from './types';
 import { processERPData, processPaymentData, runReconciliation } from './services/engine';
 import { LayoutDashboard, FileText, AlertTriangle, RefreshCw } from 'lucide-react';
@@ -26,7 +28,7 @@ const DEFAULT_CONFIG: AppConfig = {
 };
 
 // Expanded navigation types
-type ActiveView = 'dashboard' | 'anomalies' | 'audit' | 'cash' | 'commission' | 'footfall' | 'revenue' | 'wechat' | 'alipay' | 'variance';
+type ActiveView = 'dashboard' | 'anomalies' | 'audit' | 'cash' | 'commission' | 'footfall' | 'revenue' | 'wechat' | 'alipay' | 'variance' | 'validRevenue';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AnalysisState>({
@@ -214,7 +216,7 @@ const App: React.FC = () => {
 
   // Helper to determine main navigation selection even if inside a sub-view
   const getNavHighlight = () => {
-    if (['dashboard', 'cash', 'commission', 'footfall', 'revenue', 'wechat', 'alipay', 'variance'].includes(activeTab)) return 'dashboard';
+    if (['dashboard', 'cash', 'commission', 'footfall', 'revenue', 'wechat', 'alipay', 'variance', 'validRevenue'].includes(activeTab)) return 'dashboard';
     return activeTab;
   };
 
@@ -294,6 +296,12 @@ const App: React.FC = () => {
             <RevenueDetail
                 data={state.results}
                 cashActual={state.cashActual}
+                onBack={() => setActiveTab('dashboard')}
+            />
+        )}
+        {activeTab === 'validRevenue' && (
+            <ValidRevenueDetail
+                data={state.results}
                 onBack={() => setActiveTab('dashboard')}
             />
         )}

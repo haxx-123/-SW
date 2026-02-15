@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ReconciliationResult } from '../types';
 import { ArrowLeft, Banknote, AlertCircle } from 'lucide-react';
@@ -59,6 +60,7 @@ const CashDetail: React.FC<Props> = ({ data, cashActual, onBack }) => {
                 <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
                     <tr>
                         <th className="px-6 py-3 font-medium">日期</th>
+                        <th className="px-6 py-3 font-medium">交易类型</th>
                         <th className="px-6 py-3 font-medium">客户名</th>
                         <th className="px-6 py-3 font-medium">备注</th>
                         <th className="px-6 py-3 font-medium text-right">金额</th>
@@ -68,13 +70,14 @@ const CashDetail: React.FC<Props> = ({ data, cashActual, onBack }) => {
                     {data.cashRecords.map((r, i) => (
                         <tr key={i} className="hover:bg-slate-50">
                             <td className="px-6 py-3 text-slate-600">{new Date(r.date).toLocaleString('zh-CN')}</td>
+                            <td className="px-6 py-3 text-slate-900">{r.type}</td>
                             <td className="px-6 py-3 text-slate-900 font-medium">{r.client}</td>
                             <td className="px-6 py-3 text-slate-500">{r.remark || '-'}</td>
                             <td className="px-6 py-3 text-slate-900 font-mono text-right">{formatCurrency(r.amount)}</td>
                         </tr>
                     ))}
                     {data.cashRecords.length === 0 && (
-                        <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">ERP中无现金记录</td></tr>
+                        <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400">ERP中无现金记录</td></tr>
                     )}
                 </tbody>
             </table>

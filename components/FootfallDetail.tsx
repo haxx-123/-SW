@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { ReconciliationResult, ERPRecord } from '../types';
 import { ArrowLeft, Users, Phone } from 'lucide-react';
@@ -8,6 +9,9 @@ interface Props {
 }
 
 const FootfallDetail: React.FC<Props> = ({ data, onBack }) => {
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(val);
+
   // Aggregate all ERP records
   const uniqueClients = useMemo(() => {
     const allRecords: ERPRecord[] = [
@@ -17,7 +21,7 @@ const FootfallDetail: React.FC<Props> = ({ data, onBack }) => {
         ...data.depositRecords
     ];
 
-    const map = new Map<string, { name: string, phone: string, visits: number, lastVisit: Date }>();
+    const map = new Map<string, { name: string, phone: string, visits: number, lastVisit: Date, totalSpending: number }>();
 
     allRecords.forEach(r => {
         // Use Phone as primary key if available, otherwise Name
@@ -30,16 +34,22 @@ const FootfallDetail: React.FC<Props> = ({ data, onBack }) => {
                 name: r.client, 
                 phone: r.phone, 
                 visits: 0, 
-                lastVisit: r.date 
+                lastVisit: r.date,
+                totalSpending: 0
             });
         }
 
         const entry = map.get(key)!;
         entry.visits += 1;
         if (r.date > entry.lastVisit) entry.lastVisit = r.date;
+
+        // Spending Calculation Logic:
+        // Use pre-calculated salesAmount which is robust against Aggregation of mixed types (Sales + Recharge).
+        // It already contains 0 for pure recharge records and (Net + Deposit) for sales records.
+        entry.totalSpending += (r.salesAmount || 0);
     });
 
-    return Array.from(map.values()).sort((a, b) => b.visits - a.visits);
+    return Array.from(map.values()).sort((a, b) => b.totalSpending - a.totalSpending);
   }, [data]);
 
   return (
@@ -70,6 +80,7 @@ const FootfallDetail: React.FC<Props> = ({ data, onBack }) => {
                         <th className="px-6 py-3 font-medium">#</th>
                         <th className="px-6 py-3 font-medium">客户名 (Name)</th>
                         <th className="px-6 py-3 font-medium">电话 (Phone)</th>
+                        <th className="px-6 py-3 font-medium">累计消费 (Total Spending)</th>
                         <th className="px-6 py-3 font-medium">交易次数 (Visits)</th>
                         <th className="px-6 py-3 font-medium">最近光顾 (Last Seen)</th>
                     </tr>
@@ -87,6 +98,9 @@ const FootfallDetail: React.FC<Props> = ({ data, onBack }) => {
                                     </>
                                 ) : <span className="text-slate-300">-</span>}
                             </td>
+                            <td className="px-6 py-3 font-bold text-indigo-600">
+                                {formatCurrency(client.totalSpending)}
+                            </td>
                             <td className="px-6 py-3 text-slate-900">
                                 <span className="inline-block px-2 py-0.5 bg-slate-100 rounded-md font-medium text-slate-700">
                                     {client.visits}
@@ -96,7 +110,7 @@ const FootfallDetail: React.FC<Props> = ({ data, onBack }) => {
                         </tr>
                     ))}
                     {uniqueClients.length === 0 && (
-                        <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400">无法提取有效客户信息</td></tr>
+                        <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400">无法提取有效客户信息</td></tr>
                     )}
                 </tbody>
             </table>

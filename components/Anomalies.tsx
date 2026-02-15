@@ -56,7 +56,10 @@ const Anomalies: React.FC<Props> = ({ data }) => {
                         <tr key={i} className="hover:bg-slate-50">
                             <td className="px-6 py-3 text-slate-900 font-mono">{row.id}</td>
                             <td className="px-6 py-3 text-slate-600">{formatDate(row.date)}</td>
-                            <td className="px-6 py-3 text-slate-900 font-medium">{row.client}</td>
+                            <td className="px-6 py-3 text-slate-900 font-medium">
+                                <div>{row.client}</div>
+                                <div className="text-xs text-slate-500">{row.type}</div>
+                            </td>
                             <td className="px-6 py-3 text-red-600 font-bold">{formatCurrency(row.amount)}</td>
                             <td className="px-6 py-3 text-slate-500 truncate max-w-xs">{row.remark}</td>
                         </tr>
