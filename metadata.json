@@ -1,0 +1,5 @@
+{
+  "name": "Stockwise Financial Core",
+  "description": "A smart financial reconciliation engine automating fuzzy matching between ERP records and Payment Gateway bills with commission logic and dashboard analytics.",
+  "requestFramePermissions": []
+}
