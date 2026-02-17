@@ -1,20 +1,22 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import FileUpload from './components/FileUpload';
-import Dashboard from './components/Dashboard';
-import Anomalies from './components/Anomalies';
-import AuditTable from './components/AuditTable';
-import CashDetail from './components/CashDetail';
-import CommissionDetail from './components/CommissionDetail';
-import FootfallDetail from './components/FootfallDetail';
-import RevenueDetail from './components/RevenueDetail';
-import ChannelDetail from './components/ChannelDetail';
-import VarianceDetail from './components/VarianceDetail';
-import ValidRevenueDetail from './components/ValidRevenueDetail';
 import { AnalysisState, AppConfig, FileMappingConfig } from './types';
 import { processERPData, processPaymentData, runReconciliation } from './services/engine';
-import { LayoutDashboard, FileText, AlertTriangle, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, FileText, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import { TIME_WINDOW_MINUTES } from './constants';
+
+// --- Code Splitting: Lazy Load Heavy Components ---
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const Anomalies = lazy(() => import('./components/Anomalies'));
+const AuditTable = lazy(() => import('./components/AuditTable'));
+const CashDetail = lazy(() => import('./components/CashDetail'));
+const CommissionDetail = lazy(() => import('./components/CommissionDetail'));
+const FootfallDetail = lazy(() => import('./components/FootfallDetail'));
+const RevenueDetail = lazy(() => import('./components/RevenueDetail'));
+const ChannelDetail = lazy(() => import('./components/ChannelDetail'));
+const VarianceDetail = lazy(() => import('./components/VarianceDetail'));
+const ValidRevenueDetail = lazy(() => import('./components/ValidRevenueDetail'));
 
 const CACHE_KEY = 'stockwise_cache_v4';
 
@@ -29,6 +31,13 @@ const DEFAULT_CONFIG: AppConfig = {
 
 // Expanded navigation types
 type ActiveView = 'dashboard' | 'anomalies' | 'audit' | 'cash' | 'commission' | 'footfall' | 'revenue' | 'wechat' | 'alipay' | 'variance' | 'validRevenue';
+
+const PageLoader = () => (
+  <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400">
+    <Loader2 size={40} className="animate-spin mb-4 text-indigo-500" />
+    <p>Loading Component...</p>
+  </div>
+);
 
 const App: React.FC = () => {
   const [state, setState] = useState<AnalysisState>({
@@ -173,18 +182,6 @@ const App: React.FC = () => {
     
     setTimeout(() => {
         try {
-            // Note: Manual config is lost on simple parameter update unless we stored it in state. 
-            // For now, simple re-calc uses auto-detect or throws if headers are obscure.
-            // Ideally we would store FileMappingConfig in state too.
-            // However, typical flow is upload -> configure -> run -> tweak parameters.
-            // If user wants to change column mapping they usually re-upload. 
-            // We'll rely on auto-detection for parameter updates for simplicity here, 
-            // or we could add manualConfig to AnalysisState.
-            // For this implementation, we re-run auto-detect which should work if it worked the first time (even with manual),
-            // UNLESS the manual mapping was strictly required because auto-detect failed. 
-            // To be safe, let's just stick to default logic here. If user heavily relies on manual mapping, 
-            // they should re-upload to ensure mappings are applied correctly.
-            
             const { erp, payment } = state.rawData!;
             // Fallback to auto-detect for config updates
             const erpData = processERPData(erp, newConfig);
@@ -286,63 +283,65 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'dashboard' && (
-            <Dashboard 
-                data={state.results} 
-                config={state.config} 
-                onUpdateConfig={handleUpdateConfig}
-                onViewDetails={(view) => setActiveTab(view)}
-            />
-        )}
-        {activeTab === 'cash' && (
-            <CashDetail 
-                data={state.results} 
-                cashActual={state.cashActual} 
-                onBack={() => setActiveTab('dashboard')} 
-            />
-        )}
-        {activeTab === 'commission' && (
-            <CommissionDetail 
-                data={state.results} 
-                config={state.config}
-                onBack={() => setActiveTab('dashboard')} 
-            />
-        )}
-        {activeTab === 'footfall' && (
-            <FootfallDetail 
-                data={state.results} 
-                onBack={() => setActiveTab('dashboard')} 
-            />
-        )}
-        {activeTab === 'revenue' && (
-            <RevenueDetail
-                data={state.results}
-                cashActual={state.cashActual}
-                onBack={() => setActiveTab('dashboard')}
-            />
-        )}
-        {activeTab === 'validRevenue' && (
-            <ValidRevenueDetail
-                data={state.results}
-                onBack={() => setActiveTab('dashboard')}
-            />
-        )}
-        {(activeTab === 'wechat' || activeTab === 'alipay') && (
-            <ChannelDetail
-                data={state.results}
-                source={activeTab === 'wechat' ? 'WeChat' : 'Alipay'}
-                onBack={() => setActiveTab('dashboard')}
-            />
-        )}
-        {activeTab === 'variance' && (
-            <VarianceDetail
-                data={state.results}
-                cashActual={state.cashActual}
-                onBack={() => setActiveTab('dashboard')}
-            />
-        )}
-        {activeTab === 'anomalies' && <Anomalies data={state.results} />}
-        {activeTab === 'audit' && <AuditTable data={state.results} />}
+        <Suspense fallback={<PageLoader />}>
+            {activeTab === 'dashboard' && (
+                <Dashboard 
+                    data={state.results} 
+                    config={state.config} 
+                    onUpdateConfig={handleUpdateConfig}
+                    onViewDetails={(view) => setActiveTab(view)}
+                />
+            )}
+            {activeTab === 'cash' && (
+                <CashDetail 
+                    data={state.results} 
+                    cashActual={state.cashActual} 
+                    onBack={() => setActiveTab('dashboard')} 
+                />
+            )}
+            {activeTab === 'commission' && (
+                <CommissionDetail 
+                    data={state.results} 
+                    config={state.config}
+                    onBack={() => setActiveTab('dashboard')} 
+                />
+            )}
+            {activeTab === 'footfall' && (
+                <FootfallDetail 
+                    data={state.results} 
+                    onBack={() => setActiveTab('dashboard')} 
+                />
+            )}
+            {activeTab === 'revenue' && (
+                <RevenueDetail
+                    data={state.results}
+                    cashActual={state.cashActual}
+                    onBack={() => setActiveTab('dashboard')}
+                />
+            )}
+            {activeTab === 'validRevenue' && (
+                <ValidRevenueDetail
+                    data={state.results}
+                    onBack={() => setActiveTab('dashboard')}
+                />
+            )}
+            {(activeTab === 'wechat' || activeTab === 'alipay') && (
+                <ChannelDetail
+                    data={state.results}
+                    source={activeTab === 'wechat' ? 'WeChat' : 'Alipay'}
+                    onBack={() => setActiveTab('dashboard')}
+                />
+            )}
+            {activeTab === 'variance' && (
+                <VarianceDetail
+                    data={state.results}
+                    cashActual={state.cashActual}
+                    onBack={() => setActiveTab('dashboard')}
+                />
+            )}
+            {activeTab === 'anomalies' && <Anomalies data={state.results} />}
+            {activeTab === 'audit' && <AuditTable data={state.results} />}
+        </Suspense>
       </main>
     </div>
   );

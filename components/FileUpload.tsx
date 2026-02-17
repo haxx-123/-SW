@@ -1,9 +1,11 @@
 
-import React, { useRef, useState } from 'react';
-import { Upload, FileSpreadsheet, CheckCircle, Book, TableProperties, X, FileText } from 'lucide-react';
+import React, { useRef, useState, Suspense, lazy } from 'react';
+import { Upload, FileSpreadsheet, CheckCircle, Book, TableProperties, X, FileText, Loader2 } from 'lucide-react';
 import { FileMappingConfig } from '../types';
-import InstructionManual from './InstructionManual';
-import FileMapper from './FileMapper';
+
+// Lazy load modals to improve initial render time
+const InstructionManual = lazy(() => import('./InstructionManual'));
+const FileMapper = lazy(() => import('./FileMapper'));
 
 interface Props {
   onProcess: (
@@ -17,6 +19,15 @@ interface Props {
   ) => void;
   isLoading: boolean;
 }
+
+const ModalLoader = () => (
+    <div className="fixed inset-0 bg-slate-900 bg-opacity-20 z-50 flex items-center justify-center">
+        <div className="bg-white p-4 rounded-lg shadow-lg flex items-center gap-2">
+            <Loader2 className="animate-spin text-indigo-600" size={24} />
+            <span className="text-slate-700 font-medium">加载中...</span>
+        </div>
+    </div>
+);
 
 const FileUpload: React.FC<Props> = ({ onProcess, isLoading }) => {
   const [erpFile, setErpFile] = useState<File | null>(null);
@@ -209,19 +220,25 @@ const FileUpload: React.FC<Props> = ({ onProcess, isLoading }) => {
         </button>
       </div>
 
-      {showManual && <InstructionManual onClose={() => setShowManual(false)} />}
+      {showManual && (
+          <Suspense fallback={<ModalLoader />}>
+            <InstructionManual onClose={() => setShowManual(false)} />
+          </Suspense>
+      )}
       
       {mapperState.open && mapperState.file && mapperState.type && (
-          <FileMapper 
-            file={mapperState.file}
-            type={mapperState.type}
-            existingConfig={
-                mapperState.type === 'ERP' ? erpConfig : 
-                mapperState.type === 'WeChat' ? wechatConfig : alipayConfig
-            }
-            onSave={handleMapperSave}
-            onClose={() => setMapperState({ ...mapperState, open: false })}
-          />
+          <Suspense fallback={<ModalLoader />}>
+            <FileMapper 
+                file={mapperState.file}
+                type={mapperState.type}
+                existingConfig={
+                    mapperState.type === 'ERP' ? erpConfig : 
+                    mapperState.type === 'WeChat' ? wechatConfig : alipayConfig
+                }
+                onSave={handleMapperSave}
+                onClose={() => setMapperState({ ...mapperState, open: false })}
+            />
+          </Suspense>
       )}
     </div>
   );
