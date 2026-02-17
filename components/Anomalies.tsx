@@ -77,7 +77,8 @@ const Anomalies: React.FC<Props> = ({ data }) => {
                             <td className="px-6 py-3 text-slate-900 font-medium">{row.type}</td>
                             <td className="px-6 py-3 text-amber-600 font-bold">{formatCurrency(row.amount)}</td>
                             <td className="px-6 py-3 text-slate-500">
-                                {row.direction === 'income' ? '收入' : '支出'} - {row.originalRow[5] || '未知单号'}
+                                {row.direction === 'income' ? '收入' : '支出'} 
+                                {row.originalId ? ` - ${row.originalId}` : (row.originalRow[5] ? ` - ${row.originalRow[5]}` : '')}
                             </td>
                         </tr>
                     ))

@@ -105,12 +105,13 @@ const AuditTable: React.FC<Props> = ({ data }) => {
     window.XLSX.utils.book_append_sheet(wb, wsSummary, "概览 (Summary)");
 
     // --- Sheet 2: Anomalies ---
-    const anomalyHeader = ['类型', '渠道', 'ID/来源', '时间', '客户/交易类型', '金额', '备注/详情'];
+    const anomalyHeader = ['类型', '渠道', 'ID/来源', '原始单号', '时间', '客户/交易类型', '金额', '备注/详情'];
     
     const typeARows = data.missingMoney.map(r => [
       'Type A (丢钱)',
       'ERP',
       r.id, 
+      '-',
       r.date.toLocaleString(), 
       r.client, 
       r.amount, 
@@ -121,6 +122,7 @@ const AuditTable: React.FC<Props> = ({ data }) => {
       'Type B (漏单)', 
       r.source,
       `BILL_${i}`, 
+      r.originalId || '-',
       r.date.toLocaleString(), 
       r.type, 
       r.amount, 

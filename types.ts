@@ -1,4 +1,5 @@
 
+
 export interface RawERPRecord {
   [key: string]: any;
 }
@@ -30,12 +31,18 @@ export interface PaymentRecord {
   counterParty: string;
   source: 'WeChat' | 'Alipay';
   originalRow: any;
+  originalId?: string; // Copied from source file if available (e.g. Transaction ID)
 }
 
 export interface MatchedPair {
   erp: ERPRecord;
   payment: PaymentRecord;
   timeDiffMinutes: number;
+}
+
+export interface DateRange {
+  start: Date;
+  end: Date;
 }
 
 export interface ReconciliationResult {
@@ -57,6 +64,8 @@ export interface ReconciliationResult {
   cashRecords: ERPRecord[]; // Added for Audit
   depositRecords: ERPRecord[]; // Added for Audit
   processedAt: string;
+  dateRange: DateRange; // NEW
+  inferredPeriod: string; // NEW
 }
 
 export interface CommissionRule {
@@ -84,6 +93,16 @@ export interface AnalysisState {
     erp: any[][];
     payment: any[][];
   };
+}
+
+// NEW: Manual Mapping Configurations
+export interface ColumnMapping {
+  [key: string]: number; // Field Key -> Column Index
+}
+
+export interface FileMappingConfig {
+  headerRowIndex: number;
+  mapping: ColumnMapping;
 }
 
 // Declare XLSX global for the CDN script

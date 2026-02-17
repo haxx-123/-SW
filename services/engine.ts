@@ -1,5 +1,6 @@
 
-import { ERPRecord, PaymentRecord, ReconciliationResult, MatchedPair, AppConfig } from '../types';
+
+import { ERPRecord, PaymentRecord, ReconciliationResult, MatchedPair, AppConfig, FileMappingConfig } from '../types';
 import { BLACKLIST_TYPES, BLACKLIST_STATUS, BLACKLIST_COUNTERPARTY } from '../constants';
 
 // --- Helper Functions ---
@@ -53,7 +54,8 @@ export const detectHeaderRow = (data: any[][]): number => {
   const anchors = [
     '支付日期', '实收额', '支付序号', '电话 1', // ERP specific
     '交易时间', '收支类型', '交易类型', '金额', '明细名称', // Payment specific
-    '资金流向', '业务描述', '押金' // Alipay specific often + ERP Deposit
+    '资金流向', '业务描述', '押金', // Alipay specific often + ERP Deposit
+    '收/支', '商品说明', '交易分类', '交易状态', '交易订单号' // New Alipay Format Specifics
   ];
   
   let bestScore = 0;
@@ -82,7 +84,7 @@ export const detectHeaderRow = (data: any[][]): number => {
 };
 
 // Helper to find column index with fuzzy matching but prioritized exact match
-const getColIndex = (headers: any[], possibleNames: string[], excludeNames: string[] = []): number => {
+export const getColIndex = (headers: any[], possibleNames: string[], excludeNames: string[] = []): number => {
   if (!headers) return -1;
 
   // 1. Priority: Exact Match (Trimmed)
@@ -103,34 +105,42 @@ const getColIndex = (headers: any[], possibleNames: string[], excludeNames: stri
   });
 };
 
-export const processERPData = (rawData: any[][], config: AppConfig): ERPRecord[] => {
-  const headerIdx = detectHeaderRow(rawData);
+export const processERPData = (rawData: any[][], config: AppConfig, manualConfig?: FileMappingConfig | null): ERPRecord[] => {
+  let headerIdx = -1;
+  let colMap: any = {};
 
-  if (headerIdx === -1) {
-    throw new Error("ERP解析错误: 无法找到表头。请确保包含 '支付日期', '实收额', '支付序号' 等列。");
+  if (manualConfig) {
+      // Manual Mode
+      headerIdx = manualConfig.headerRowIndex;
+      colMap = manualConfig.mapping;
+  } else {
+      // Auto Mode
+      headerIdx = detectHeaderRow(rawData);
+      if (headerIdx === -1) {
+        throw new Error("ERP解析错误: 无法找到表头。请尝试使用'手动匹配'功能。");
+      }
+      const headers = rawData[headerIdx] as string[];
+      // Dynamic Column Mapping (Fuzzy)
+      colMap = {
+        date: getColIndex(headers, ['支付日期', 'Date', 'Time', '时间', '日期']),
+        amount: getColIndex(headers, ['实收额', 'Amount', 'Price', '金额', '实收'], ['押金']),
+        deposit: getColIndex(headers, ['押金', 'Deposit', '储值']),
+        cash: getColIndex(headers, ['现金', 'Cash']),
+        type: getColIndex(headers, ['交易类型', 'Type', '类型']),
+        client: getColIndex(headers, ['客户名', 'Client', 'Name', '客户']),
+        remark: getColIndex(headers, ['备注', 'Remark', 'Note', '说明']),
+        phone: getColIndex(headers, ['电话 1', '电话', 'Phone', 'Mobile']),
+        id: getColIndex(headers, ['支付序号', 'ID', 'Order', '单号'])
+      };
   }
 
   const headers = rawData[headerIdx] as string[];
   const rows = rawData.slice(headerIdx + 1);
   const totalRawRows = rows.length;
 
-  // Dynamic Column Mapping (Fuzzy)
-  const colMap = {
-    date: getColIndex(headers, ['支付日期', 'Date', 'Time', '时间', '日期']),
-    // Explicitly exclude '押金' from Amount detection to satisfy user request
-    amount: getColIndex(headers, ['实收额', 'Amount', 'Price', '金额', '实收'], ['押金']),
-    deposit: getColIndex(headers, ['押金', 'Deposit', '储值']),
-    cash: getColIndex(headers, ['现金', 'Cash']),
-    type: getColIndex(headers, ['交易类型', 'Type', '类型']),
-    client: getColIndex(headers, ['客户名', 'Client', 'Name', '客户']),
-    remark: getColIndex(headers, ['备注', 'Remark', 'Note', '说明']),
-    phone: getColIndex(headers, ['电话 1', '电话', 'Phone', 'Mobile']), // Updated for Screenshot
-    id: getColIndex(headers, ['支付序号', 'ID', 'Order', '单号'])
-  };
-
   // Validation: Missing Required Columns
-  if (colMap.date === -1 || colMap.amount === -1) {
-     throw new Error(`找到表头 (第 ${headerIdx + 1} 行), 但缺失关键列 (支付日期/实收额)。检测到的表头: ${headers.join(', ')}`);
+  if (colMap.date === -1 || colMap.amount === -1 || colMap.date === undefined || colMap.amount === undefined) {
+     throw new Error(`缺少关键列 (支付日期/实收额)。${manualConfig ? '请检查手动映射配置。' : '自动识别失败。'}`);
   }
 
   const records: ERPRecord[] = [];
@@ -160,9 +170,6 @@ export const processERPData = (rawData: any[][], config: AppConfig): ERPRecord[]
     const isCash = type.includes('现金') || (cashAmount > 0); 
 
     // Filter Logic:
-    // Drop if NO Date
-    // Drop if Net Amount ~ 0 AND Deposit ~ 0 AND Not Cash
-    // This allows keeping "Pure Deposit" transactions (Amount=0, Deposit>0)
     if (!date || (Math.abs(amount) < 0.01 && Math.abs(deposit) < 0.01 && !isCash)) {
       droppedRows.push({ row: idx + headerIdx + 1, reason: "Invalid Date or Zero Value", data: row });
       return; 
@@ -175,14 +182,8 @@ export const processERPData = (rawData: any[][], config: AppConfig): ERPRecord[]
     
     // Commission Logic (Dynamic)
     let commission = 0;
-    
-    // Rule: Commission applies to Sales/Consumption, NOT Top-ups (Recharge).
-    // Identify if it's a Recharge
     const isRecharge = type.includes('押金充值') || type.includes('充值');
 
-    // Commission should be based on the Service Value (Raw Amount), not just the Net Payment
-    // e.g. Paid 100 via Deposit -> Net 0, but Commission should be on 100.
-    // BUT only calculate if it is NOT a recharge.
     if (config && config.commissionRules && !isRecharge) {
         const matchedRule = config.commissionRules.find(rule => 
             remark.includes(rule.keyword)
@@ -192,9 +193,6 @@ export const processERPData = (rawData: any[][], config: AppConfig): ERPRecord[]
         }
     }
 
-    // NEW: Calculate Actual Sales Value (Spending) per row
-    // If it's a recharge, spending is 0 (it's a liability).
-    // If it's a sale, spending is Net Cash + Deposit Used.
     const salesAmount = isRecharge ? 0 : (amount + deposit);
 
     records.push({
@@ -220,32 +218,38 @@ export const processERPData = (rawData: any[][], config: AppConfig): ERPRecord[]
   return records;
 };
 
-export const processPaymentData = (rawData: any[][], source: 'WeChat' | 'Alipay' = 'WeChat'): PaymentRecord[] => {
-  const headerIdx = detectHeaderRow(rawData);
+export const processPaymentData = (rawData: any[][], source: 'WeChat' | 'Alipay', manualConfig?: FileMappingConfig | null): PaymentRecord[] => {
+  let headerIdx = -1;
+  let colMap: any = {};
 
-  if (headerIdx === -1) {
-     // Be more lenient if one file is empty or malformed but try to give useful error
-     console.warn(`[${source}] 无法找到表头，跳过此文件。`);
-     return [];
+  if (manualConfig) {
+    headerIdx = manualConfig.headerRowIndex;
+    colMap = manualConfig.mapping;
+  } else {
+    headerIdx = detectHeaderRow(rawData);
+    if (headerIdx === -1) {
+         console.warn(`[${source}] 无法找到表头，跳过此文件。`);
+         return [];
+    }
+    const headers = rawData[headerIdx] as string[];
+    colMap = {
+      date: getColIndex(headers, ['交易时间', '时间', 'Time', 'Date', '日期']),
+      amount: getColIndex(headers, ['金额', 'Amount', 'Price', '实收']),
+      type: getColIndex(headers, ['商品说明', '交易类型', '类型', 'Type', '商品', '名称', '业务描述', '交易分类'], ['收支']),
+      direction: getColIndex(headers, ['收/支', '收支类型', '收/支', '收支', 'Direction', 'Status', '资金流向']),
+      status: getColIndex(headers, ['交易状态', '状态', 'Status', '交易状态', '当前状态']),
+      counterParty: getColIndex(headers, ['交易对方', '对方', 'Counterparty', '明细名称', '商品名称', 'Name', '交易对方']),
+      id: getColIndex(headers, ['交易订单号', '商家订单号', '交易单号', '单号', 'Order ID', 'Transaction ID'])
+    };
   }
   
   const headers = rawData[headerIdx] as string[];
   const rows = rawData.slice(headerIdx + 1);
   const totalRawRows = rows.length;
 
-  const colMap = {
-    date: getColIndex(headers, ['交易时间', '时间', 'Time', 'Date', '日期']),
-    amount: getColIndex(headers, ['金额', 'Amount', 'Price', '实收']),
-    // Critically exclude '收支' from type detection to avoid confusion with '收支类型'
-    type: getColIndex(headers, ['交易类型', '类型', 'Type', '商品', '名称', '业务描述'], ['收支']),
-    direction: getColIndex(headers, ['收支类型', '收/支', '收支', 'Direction', 'Status', '资金流向']),
-    status: getColIndex(headers, ['状态', 'Status', '交易状态', '当前状态']),
-    counterParty: getColIndex(headers, ['对方', 'Counterparty', '明细名称', '商品名称', 'Name', '交易对方'])
-  };
-
   // Validation
-  if (colMap.date === -1 || colMap.amount === -1) {
-     throw new Error(`[${source}] 找到表头 (第 ${headerIdx + 1} 行), 但缺失关键列 (交易时间/金额)。检测到的表头: ${headers.join(', ')}`);
+  if (colMap.date === -1 || colMap.amount === -1 || colMap.date === undefined || colMap.amount === undefined) {
+     throw new Error(`[${source}] 缺失关键列 (交易时间/金额)。${manualConfig ? '请检查手动映射。' : '自动识别失败。'}`);
   }
 
   const records: PaymentRecord[] = [];
@@ -270,11 +274,11 @@ export const processPaymentData = (rawData: any[][], source: 'WeChat' | 'Alipay'
     const rawDirection = colMap.direction > -1 ? (row[colMap.direction] || '').toString() : '';
     const status = colMap.status > -1 ? (row[colMap.status] || '').toString() : '';
     const counterParty = colMap.counterParty > -1 ? (row[colMap.counterParty] || '').toString() : '';
+    const originalId = colMap.id > -1 ? (row[colMap.id] || '').toString() : undefined;
     
     // 2. The Purge (Strict Blacklist)
 
     // User Requirement: WeChat - Only allow '经营收款'.
-    // NOTE: This check depends on correct column mapping of 'type'
     if (source === 'WeChat' && !type.includes('经营收款')) {
         droppedRows.push({ row: idx + headerIdx + 1, reason: `WeChat Filter: Only 经营收款 allowed, got ${type}`, data: row });
         return;
@@ -334,16 +338,14 @@ export const processPaymentData = (rawData: any[][], source: 'WeChat' | 'Alipay'
       direction: finalDirection,
       counterParty,
       source, // Added source
-      originalRow: row
+      originalRow: row,
+      originalId // Added optional ID
     });
   });
 
   console.group(`${source} Data Processing Report`);
   console.log(`Total Raw Rows: ${totalRawRows}`);
   console.log(`Final Clean Rows: ${records.length}`);
-  if (records.length === 0 && droppedRows.length > 0) {
-      console.warn("All rows were dropped. Top drop reasons:", droppedRows.slice(0, 3));
-  }
   console.groupEnd();
 
   return records;
@@ -552,6 +554,31 @@ export const runReconciliation = (
   const footfall = new Set(erpData.map(r => r.phone).filter(p => p)).size;
   const matchRate = (matches.length / aggregatedERP.length) * 100 || 0;
 
+  // NEW: Date Range and Inferred Period
+  const allDates: number[] = [];
+  erpData.forEach(r => allDates.push(r.date.getTime()));
+  payData.forEach(r => allDates.push(r.date.getTime()));
+
+  let minDate = new Date();
+  let maxDate = new Date();
+  let inferredPeriod = "无数据期间";
+
+  if (allDates.length > 0) {
+      minDate = new Date(Math.min(...allDates));
+      maxDate = new Date(Math.max(...allDates));
+      
+      const isSameDay = minDate.toDateString() === maxDate.toDateString();
+      const isSameMonth = minDate.getFullYear() === maxDate.getFullYear() && minDate.getMonth() === maxDate.getMonth();
+      
+      if (isSameDay) {
+          inferredPeriod = `${minDate.getFullYear()}年${minDate.getMonth()+1}月${minDate.getDate()}日_当日对账`;
+      } else if (isSameMonth) {
+          inferredPeriod = `${minDate.getFullYear()}年${minDate.getMonth()+1}月_月度对账`;
+      } else {
+          inferredPeriod = `${minDate.getMonth()+1}月${minDate.getDate()}日 - ${maxDate.getMonth()+1}月${maxDate.getDate()}日_阶段对账`;
+      }
+  }
+
   return {
     summary: {
       totalRevenueERP,
@@ -570,6 +597,8 @@ export const runReconciliation = (
     missingEntry,
     cashRecords: aggregatedCashERP,
     depositRecords: aggregatedDepositERP,
-    processedAt: new Date().toISOString()
+    processedAt: new Date().toISOString(),
+    dateRange: { start: minDate, end: maxDate },
+    inferredPeriod
   };
 };
