@@ -83,7 +83,7 @@ const InstructionManual: React.FC<Props> = ({ onClose }) => {
                             <td className="px-4 py-2 font-medium">现金 (Cash)</td>
                             <td className="px-4 py-2">现金, Cash</td>
                             <td className="px-4 py-2 text-slate-400">-</td>
-                            <td className="px-4 py-2">如果此列数值 > 0，则标记为现金支付</td>
+                            <td className="px-4 py-2">如果此列数值 &gt; 0，则标记为现金支付</td>
                         </tr>
                          <tr>
                             <td className="px-4 py-2 font-medium">类型 (Type)</td>
